@@ -1,9 +1,13 @@
 import os
 import pickle
-from pathlib import Path
+import json          # <-- NEW: Required for exporting data to your UI layout
+import numpy as np   # <-- NEW: Used for calculation arrays
 import pandas as pd
+from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
+# 🔥 NEW: Imported evaluation metrics to calculate your dashboard numbers
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 def build_and_save_model():
     print("⚙️ Loading EV training dataset...")
@@ -49,6 +53,28 @@ def build_and_save_model():
     with open(models_dir / "charging_model.pkl", "wb") as f:
         pickle.dump(model, f)
     print("💾 Model binary successfully saved to 'models/charging_model.pkl'")
+
+    # 🔥 FIX STEP: Generate model metrics based on testing dataset evaluations
+    print("📊 Evaluating model validation metrics for full-stack UI dashboard...")
+    predictions = model.predict(X_test)
+    
+    mae_score = mean_absolute_error(y_test, predictions)
+    r2_score_val = r2_score(y_test, predictions)
+    rmse_score = np.sqrt(mean_squared_error(y_test, predictions))
+
+    # Match the exact data key schema strings expected by your React API controllers
+    metrics_payload = {
+        "r2_score": f"{round(r2_score_val * 100, 2)}%",
+        "mae_hours": f"{round(mae_score, 2)}h",
+        "rmse_hours": f"{round(rmse_score, 2)}h"
+    }
+
+    # Export the payload to metrics.json
+    metrics_output_path = models_dir / "metrics.json"
+    with open(metrics_output_path, "w", encoding="utf-8") as f:
+        json.dump(metrics_payload, f, indent=4)
+        
+    print(f"✅ SUCCESS: Saved data validation metrics directly to -> {metrics_output_path}")
 
 if __name__ == "__main__":
     build_and_save_model()
