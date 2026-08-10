@@ -46,12 +46,15 @@ if METRICS_PATH.exists():
         model_metrics = None
 
 @app.get("/api/health")
+@app.get("/health")
 def health_check():
     return {"status": "online", "model_loaded": model is not None}
 
 @app.get("/")
 def root_health():
-    return FileResponse(FRONTEND_DIST_DIR / "index.html")
+    if FRONTEND_DIST_DIR.exists():
+        return FileResponse(FRONTEND_DIST_DIR / "index.html")
+    return {"status": "online", "model_loaded": model is not None}
 
 @app.get("/{path:path}")
 def spa_fallback(path: str):
@@ -59,12 +62,16 @@ def spa_fallback(path: str):
         raise HTTPException(status_code=404, detail="Not found")
 
     file_path = FRONTEND_DIST_DIR / path
-    if file_path.exists() and file_path.is_file():
+    if FRONTEND_DIST_DIR.exists() and file_path.exists() and file_path.is_file():
         return FileResponse(file_path)
 
-    return FileResponse(FRONTEND_DIST_DIR / "index.html")
+    if FRONTEND_DIST_DIR.exists():
+        return FileResponse(FRONTEND_DIST_DIR / "index.html")
+
+    raise HTTPException(status_code=404, detail="Not found")
 
 @app.post("/predict")
+@app.post("/api/predict")
 def run_inference(payload: TelemetryInput):
     if not model:
         raise HTTPException(status_code=503, detail="ML model not initialized.")
