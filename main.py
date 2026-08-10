@@ -15,9 +15,10 @@ FRONTEND_DIST_DIR = BASE_DIR / "frontend" / "dist"
 
 app = FastAPI(title="EV Charging Duration Predictor API", version="1.0.0")
 
+# 🔥 FIX 1: Open CORS rules to allow your deployed web domain to talk to your API safely
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,14 +37,6 @@ try:
         model = pickle.load(f)
 except FileNotFoundError:
     model = None
-
-model_metrics = None
-if METRICS_PATH.exists():
-    try:
-        with METRICS_PATH.open("r", encoding="utf-8") as f:
-            model_metrics = json.load(f)
-    except json.JSONDecodeError:
-        model_metrics = None
 
 @app.get("/api/health")
 @app.get("/health")
@@ -78,6 +71,16 @@ def run_inference(payload: TelemetryInput):
     if payload.state_of_charge_start >= payload.state_of_charge_end:
         raise HTTPException(status_code=400, detail="Target charge must be greater than start charge.")
 
+    # 🔥 FIX 2: Read metrics.json dynamically on every request 
+    # This prevents the empty dashes by reading the file AFTER train.py builds it
+    live_metrics = None
+    if METRICS_PATH.exists():
+        try:
+            with METRICS_PATH.open("r", encoding="utf-8") as f:
+                live_metrics = json.load(f)
+        except json.JSONDecodeError:
+            live_metrics = None
+
     gap = ((payload.state_of_charge_end - payload.state_of_charge_start) / 100) * payload.battery_capacity_kwh
     theoretical = gap / payload.charging_rate_kw
 
@@ -100,7 +103,7 @@ def run_inference(payload: TelemetryInput):
     return {
         "status": "success",
         "predicted_duration_hours": predicted_hours,
-        "model_metrics": model_metrics,
+        "model_metrics": live_metrics,  # Returns the fresh metrics data object cleanly
         "calculation_summary": {
             "energy_gap_kwh": round(float(gap), 2),
             "theoretical_hours": round(float(theoretical), 2),
@@ -109,4 +112,3 @@ def run_inference(payload: TelemetryInput):
             "charging_type": payload.charging_type,
         },
     }
-
